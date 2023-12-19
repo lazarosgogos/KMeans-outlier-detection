@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/DataMining.iml" filepath="$PROJECT_DIR$/.idea/modules/DataMining.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/DataMining-build.iml" filepath="$PROJECT_DIR$/.idea/modules/DataMining-build.iml" />
     </modules>
   </component>
 </project>
