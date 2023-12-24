@@ -1,5 +1,15 @@
+
+import org.apache.spark.SparkContext._
+import org.apache.spark.{SparkConf, SparkContext}
 object Main {
   def main(args: Array[String]): Unit = {
+
+    val conf = new SparkConf()
+      .setMaster("local[2]") // run using 2 threads, use local[*] to run with as many threads as possible
+      .setAppName("DataMinerApp")
+
+    val sc = new SparkContext()
+
     val inputfile = "points.csv"
     val src = scala.io.Source.fromFile(inputfile)
     val lines = src.getLines()

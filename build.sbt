@@ -6,3 +6,5 @@ lazy val root = (project in file("."))
   .settings(
     name := "DataMining"
   )
+
+libraryDependencies += "org.apache.spark" %% "spark-core" % "3.5.0"
