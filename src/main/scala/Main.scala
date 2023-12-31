@@ -1,76 +1,45 @@
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.{SparkConf, SparkContext}
+//import org.apache.spark.sql.SparkSession
+
 object Main {
   def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf()
-      .setMaster("local[2]") // run using 2 threads, use local[*] to run with as many threads as possible
+      .setMaster("local[1]") // run using 2 threads, use local[*] to run with as many threads as possible
       .setAppName("DataMinerApp")
 
-    val sc = new SparkContext()
-
+    val sc = new SparkContext(conf)
+    val currentDir = System.getProperty("user.dir")
+//    val inputfile = "file://" + currentDir +"/points.csv"
     val inputfile = "points.csv"
-    val src = scala.io.Source.fromFile(inputfile)
-    val lines = src.getLines()
 
-    val validPoints = lines.flatMap(parsePoint).toList
-    val (minX, minY, maxX, maxY) = findMinMaxValues(validPoints)
+    val txtFile = sc.textFile(inputfile).cache()
 
-    var scaledPoints = List[(Double, Double)]()
-    validPoints.foreach(p => {
-      var x = p._1
-      var y = p._2
-      x = scaleValue(x, minX, maxX)
-      y = scaleValue(y, minY, maxY)
-      val newP = (x,y)
-      scaledPoints = scaledPoints :+ newP
+    val result = txtFile.map(line => line.split('\n').mkString) // split each line
+      .filter(x => !x.startsWith(",") && !x.endsWith(",") && x.nonEmpty) // keep only valid points
+      .map(line => {
+        val splitted = line.split(",")
+        (splitted(0).trim.toDouble, splitted(1).trim.toDouble) // convert to numbers
+      }) // create tuples
+      .collect() // create the RDD
+
+    // find min/max values per column
+    val minX = result.minBy(_._1)._1
+    val minY = result.minBy(_._2)._2
+    val maxX = result.maxBy(_._1)._1
+    val maxY = result.maxBy(_._2)._2
+//    println(minX)
+
+    val data = result.map(d => {
+      var x = d._1
+      var y = d._2
+//      x = ((x-minX) / (maxX - minX))
+
+      ((x - minX)/(maxX - minX), (y - minY)/(maxY - minY))
     })
 
-//    scaledPoints.foreach(println)
-  }
 
-  def scaleValue(value: Double, min: Double, max: Double): Double = {
-    (value - min) / (max - min)
-  }
-
-  def findMinMaxValues(points: List[(Double, Double)]): (Double, Double, Double, Double) = {
-    var minX = Double.MaxValue
-    var minY = Double.MaxValue
-    var maxX = Double.MinValue
-    var maxY = Double.MinValue
-    points.foreach(point => {
-      val x = point._1
-      val y = point._2
-      // update min and max values
-      minX = math.min(minX, x)
-      minY = math.min(minY, y)
-      maxX = math.max(maxX, x)
-      maxY = math.max(maxY, y)
-    })
-    (minX, minY, maxX, maxY)
-  }
-
-  def parsePoint(line: String): Option[(Double, Double)] = {
-    // Split the line based on comma
-    val values = line.split(",")
-
-    // Check if the line has both x and y values
-    if (values.length == 2) {
-      try {
-        val x = values(0).trim.toDouble
-        val y = values(1).trim.toDouble
-        Some((x, y))
-      } catch {
-        case e: NumberFormatException =>
-          // Ignore lines that cannot be parsed as doubles
-//          println("exception:" + line)
-          None
-      }
-    } else {
-      // Ignore lines that do not have both x and y values
-//      println("Length not 2:" + line)
-      None
-    }
   }
 }
