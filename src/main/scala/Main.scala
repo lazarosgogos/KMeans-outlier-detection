@@ -17,11 +17,13 @@ object Main {
       .getOrCreate() // It's either SparkSession or SparkContext, choose your enemy!!
     val sc = ss.sparkContext
 
-    val currentDir = System.getProperty("user.dir")
-    //    val inputfile = "file://" + currentDir +"/points.csv"
-    val inputfile = "points.csv"
+    var inputFile = "points.csv"
+    if (args.length > 0){
+      inputFile = args(0)
+      println(args(0))
+    }
 
-    val txtFile = sc.textFile(inputfile).cache()
+    val txtFile = sc.textFile(inputFile).cache()
 
     val result = txtFile.map(line => line.split('\n').mkString) // split each line
       .filter(x => !x.startsWith(",") && !x.endsWith(",") && x.nonEmpty) // keep only valid points
