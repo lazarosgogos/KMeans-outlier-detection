@@ -7,14 +7,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 object Main {
   def main(args: Array[String]): Unit = {
-    /*val conf = new SparkConf()
-      .setMaster("local[1]") // run using 2 threads, use local[*] to run with as many threads as possible
-      .setAppName("DataMinerApp")*/
-//    val sc = new SparkContext(conf)
     val ss = SparkSession.builder()
-      .master("local[8]")
-      .appName("DataMinerApp")
-      .getOrCreate() // It's either SparkSession or SparkContext, choose your enemy!!
+      .master("local[2]")
+      .appName("PapaGo_Clustering")
+      .getOrCreate()
     val sc = ss.sparkContext
 
     var inputFile = "points.csv"
@@ -23,57 +19,59 @@ object Main {
       println(args(0))
     }
 
-    val txtFile = sc.textFile(inputFile).cache()
+    //    Read input file
+    val rawDataRDD = sc.textFile(inputFile)
 
-    val result = txtFile.map(line => line.split('\n').mkString) // split each line
-      .filter(x => !x.startsWith(",") && !x.endsWith(",") && x.nonEmpty) // keep only valid points
-      .map(line => {
-        val splitted = line.split(",")
-        (splitted(0).trim.toDouble, splitted(1).trim.toDouble) // convert to numbers
-      }) // create tuples
-      .collect() // create the RDD
+    //    Data cleaning
+    val clearDataRDD = rawDataRDD.filter(line => !line.startsWith(",") && !line.endsWith(",") && line.nonEmpty)
 
-    // find min/max values per column
-    val minX = result.minBy(_._1)._1
-    val minY = result.minBy(_._2)._2
-    val maxX = result.maxBy(_._1)._1
-    val maxY = result.maxBy(_._2)._2
-//    println(minX)
+    //    Data splitting
+    val validCoordinatesRDD = clearDataRDD.map(line => {
+      val numbers = line.split(",")
+      (numbers(0).trim.toDouble, numbers(1).trim.toDouble)
+    })
 
-    val data = result.map(d => {
-      var x = d._1
-      var y = d._2
+    //    Data transformation
+    val xCoordinatesRDD = validCoordinatesRDD.map(coordinates => coordinates._1)
+    val yCoordinatesRDD = validCoordinatesRDD.map(coordinates => coordinates._2)
+    val minX = xCoordinatesRDD.min
+    val maxX = xCoordinatesRDD.max
+    val minY = yCoordinatesRDD.min
+    val maxY = yCoordinatesRDD.max
+    val transformedCoordinatesRDD = validCoordinatesRDD.map(coordinates => {
+      val x = coordinates._1
+      val y = coordinates._2
       ((x - minX)/(maxX - minX), (y - minY)/(maxY - minY))
-    }) // scale values
+    })
 
     // ----------------------- K MEANS -----------------------
     // for more info refer to:
     // https://spark.apache.org/docs/latest/ml-clustering.html
     val schema = StructType(
-    StructField("x", DoubleType, false) ::
-    StructField("y", DoubleType, false) :: Nil
+    StructField(name = "x", dataType = DoubleType, nullable = false) ::
+    StructField(name = "y", dataType = DoubleType, nullable = false) :: Nil
     )
     // How and why?
     // here's the answer
     // https://stackoverflow.com/questions/41042809/tuple-to-data-frame-in-spark-scala
-    val rdd = sc.parallelize(data)
-      .map(line => Row(
-        line._1.asInstanceOf[Number].doubleValue(),
-        line._2.asInstanceOf[Number].doubleValue())
-      )
-    val df = ss.createDataFrame(rdd, schema)
+
+    val data = transformedCoordinatesRDD.map(line => Row(
+      line._1.asInstanceOf[Number].doubleValue(),
+      line._2.asInstanceOf[Number].doubleValue()
+    ))
+    val dataFrame = ss.createDataFrame(data, schema)
 
     //    df.head(50).foreach(println)
-    val kmeans = new KMeans().setK(20).setSeed(199L)
+    val kMeans = new KMeans().setK(20).setSeed(199L)
 
     //creating features column
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y"))
       .setOutputCol("features")
 
-    val features = assembler.transform(df)
+    val features = assembler.transform(dataFrame)
     // Train the model
-    val model = kmeans.fit(features)
+    val model = kMeans.fit(features)
 
 
     // Make predictions
