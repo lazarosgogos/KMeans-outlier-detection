@@ -1,11 +1,11 @@
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.ClusteringEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 object Main {
+
   def main(args: Array[String]): Unit = {
     val ss = SparkSession.builder()
       .master("local[2]")
@@ -13,35 +13,35 @@ object Main {
       .getOrCreate()
     val sc = ss.sparkContext
 
-    var inputFile = "points.csv"
-    if (args.length > 0){
-      inputFile = args(0)
-      println(args(0))
-    }
-
-    //    Read input file
+    //    1. Read input file
+    val inputFile = getInputFileName(args)
     val rawDataRDD = sc.textFile(inputFile)
 
-    //    Data cleaning
-    val clearDataRDD = rawDataRDD.filter(line => !line.startsWith(",") && !line.endsWith(",") && line.nonEmpty)
+    //    2. Perform data cleaning
+    //      2a. Filter out lines with missing values
+    val cleanDataRDD = rawDataRDD.filter(line =>
+      !line.startsWith(",") &&
+      !line.endsWith(",") &&
+       line.nonEmpty
+    )
 
-    //    Data splitting
-    val validCoordinatesRDD = clearDataRDD.map(line => {
-      val numbers = line.split(",")
-      (numbers(0).trim.toDouble, numbers(1).trim.toDouble)
+    //      2b. Perform data splitting
+    val validCoordinatesRDD = cleanDataRDD.map(line => {
+      val coordinates = line.split(",")
+      (coordinates(0).trim.toDouble, coordinates(1).trim.toDouble)
     })
 
-    //    Data transformation
+    //    3. Transform data to [0, 1]
     val xCoordinatesRDD = validCoordinatesRDD.map(coordinates => coordinates._1)
     val yCoordinatesRDD = validCoordinatesRDD.map(coordinates => coordinates._2)
-    val minX = xCoordinatesRDD.min
-    val maxX = xCoordinatesRDD.max
-    val minY = yCoordinatesRDD.min
-    val maxY = yCoordinatesRDD.max
+    val xMin = xCoordinatesRDD.min
+    val xMax = xCoordinatesRDD.max
+    val yMin = yCoordinatesRDD.min
+    val yMax = yCoordinatesRDD.max
     val transformedCoordinatesRDD = validCoordinatesRDD.map(coordinates => {
       val x = coordinates._1
       val y = coordinates._2
-      ((x - minX)/(maxX - minX), (y - minY)/(maxY - minY))
+      ((x - xMin)/(xMax - xMin), (y - yMin)/(yMax - yMin))
     })
 
     // ----------------------- K MEANS -----------------------
@@ -85,6 +85,14 @@ object Main {
     // show the result
     println("Cluster Centers: ")
     model.clusterCenters.foreach(println)
+  }
 
+  def getInputFileName(args: Array[String]) : String = {
+    var defaultFileName = "points.csv"
+    if (args.length == 0) {
+      defaultFileName
+      return defaultFileName
+    }
+    args(0)
   }
 }
