@@ -1,6 +1,4 @@
-
-import org.apache.log4j.spi.Configurator
-import org.apache.log4j.{Level, Logger}
+import org.apache.avro.io.Encoder
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.ClusteringEvaluator
@@ -10,10 +8,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 object Main {
 
-  def main(args: Array[String]): Unit = {
+   def main(args: Array[String]): Unit = {
 
     //    0. Initialize SparkSession and SparkContext
-    val ss = initializeSparkSession(no_cores = 2, appName = "PapaGo_Clustering")
+    val ss = initializeSparkSession(cores = 2, appName = "PapaGo_Clustering")
     val sc = ss.sparkContext
     sc.setLogLevel("OFF")
 
@@ -32,10 +30,7 @@ object Main {
     // https://spark.apache.org/docs/latest/ml-clustering.html
 
     val dataFrame = createDataFrameFromCoordinatesRDD(transformedCoordinatesRDD, ss)
-
-
-    //    df.head(50).foreach(println)
-    val kMeans = new KMeans().setK(20).setSeed(199L)
+    val kMeans = new KMeans().setK(50).setSeed(22L)
 
     //creating features column
     val assembler = new VectorAssembler()
@@ -46,24 +41,34 @@ object Main {
     // Train the model
     val model = kMeans.fit(features)
 
+//     todo: will make them more beautiful soon
+    val xMin = coordinatesLimits.head
+    val xMax = coordinatesLimits(1)
+    val yMin = coordinatesLimits(2)
+    val yMax = coordinatesLimits(3)
 
     // Make predictions
     val predictions = model.transform(features)
+    predictions.select("x", "y", "prediction").write.mode(SaveMode.Overwrite).csv("predictions.csv")
 
     val evaluator = new ClusteringEvaluator()
 
     val silhouette = evaluator.evaluate(predictions)
-    println(s"Silhouette with squared euclidean distance = $silhouette")
+//    println(s"Silhouette with squared euclidean distance = $silhouette")
 
     // show the result
     println("Cluster Centers: ")
-    model.clusterCenters.foreach(println)
+//    model.clusterCenters.foreach(println)
+
+    val initialCenters = model.clusterCenters.map(coordinates => Vector(coordinates(0) * (xMax - xMin) + xMin, coordinates(1) * (yMax - yMin) + yMin))
+    println(" ")
+    initialCenters.zipWithIndex.foreach(vector => printf("centers.append([%f, %f, %d])\n", vector._1(0), vector._1(1), vector._2))
     sc.stop(0)
   }
 
-  private def initializeSparkSession(no_cores : Integer, appName : String) : SparkSession = {
+  private def initializeSparkSession(cores : Integer, appName : String) : SparkSession = {
     SparkSession.builder()
-      .master(s"local[$no_cores]")
+      .master(s"local[$cores]")
       .appName(appName)
       .getOrCreate()
   }
