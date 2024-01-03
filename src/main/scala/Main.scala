@@ -1,4 +1,6 @@
 
+import org.apache.log4j.spi.Configurator
+import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.ClusteringEvaluator
@@ -13,6 +15,7 @@ object Main {
     //    0. Initialize SparkSession and SparkContext
     val ss = initializeSparkSession(no_cores = 2, appName = "PapaGo_Clustering")
     val sc = ss.sparkContext
+    sc.setLogLevel("OFF")
 
     //    1. Read input file
     val rawDataRDD = readInputDataFile(sc, args)
