@@ -13,7 +13,7 @@ object Main {
   private var yMin: Double = 0.0
   private var yMax: Double = 1.0
 
-  private final val NANOS_PER_SEC : Double = 1e9d
+  private final val NANOS_PER_SEC: Double = 1e9d
 
   def main(args: Array[String]): Unit = {
 
@@ -41,7 +41,7 @@ object Main {
     )
 
     val duration = (System.nanoTime - startTimestamp) / NANOS_PER_SEC
-    println(s"Total execution time: $duration sec")
+    println(s"\nTotal execution time: $duration sec")
     sc.stop(0)
   }
 
@@ -154,23 +154,22 @@ object Main {
       .withColumn("xOriginal", predictions("xScaled") * (xMax - xMin) + xMin)
       .withColumn("yOriginal", predictions("yScaled") * (yMax - yMin) + yMin)
       .rdd.map(row => {
-      val xScaled = row.getDouble(0)
-      val yScaled = row.getDouble(1)
-      val clusterId = row.getInt(2)
-      val xOriginal = row.getDouble(3)
-      val yOriginal = row.getDouble(4)
-      val xClusterCenter = originalCenters(clusterId)(0)
-      val yClusterCenter = originalCenters(clusterId)(1)
-      val euclideanDistanceFromCenter = math.sqrt(
-        math.pow(xOriginal - xClusterCenter, 2) +
-        math.pow(yOriginal - yClusterCenter, 2)
-      )
-      Row(xScaled, yScaled, clusterId, xOriginal, yOriginal,
+        val xScaled = row.getDouble(0)
+        val yScaled = row.getDouble(1)
+        val clusterId = row.getInt(2)
+        val xOriginal = row.getDouble(3)
+        val yOriginal = row.getDouble(4)
+        val xClusterCenter = originalCenters(clusterId)(0)
+        val yClusterCenter = originalCenters(clusterId)(1)
+        val euclideanDistanceFromCenter = math.sqrt(
+          math.pow(xOriginal - xClusterCenter, 2) +
+            math.pow(yOriginal - yClusterCenter, 2)
+        )
+        Row(xScaled, yScaled, clusterId, xOriginal, yOriginal,
           xClusterCenter, yClusterCenter, euclideanDistanceFromCenter)
-    })
-//    predictionsExpanded.take(5).foreach(println)
+      })
 
-    val meanDistancesList = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
+    val meanDistances = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
       .mapValues(distance => (distance, 1))
       .reduceByKey((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
       .mapValues(pair => pair._1 / pair._2)
@@ -178,22 +177,17 @@ object Main {
       .toList
       .sortBy(pair => pair._1)
 
-    val standardDeviationsList = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
+    val stdDistances = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
       .mapValues(x => (1, x, x * x))
       .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2, x._3 + y._3))
-      .mapValues(x => math.sqrt(x._3 /x._1 - math.pow((x._2/x._1), 2)))
+      .mapValues(x => math.sqrt(x._3 / x._1 - math.pow(x._2 / x._1, 2)))
       .collect()
       .toList
       .sortBy(pair => pair._1)
 
-//    meanDistancesList.foreach(println)
-
-//    println()
-
-//    standardDeviationsList.foreach(println)
-
-    predictionsExpanded.filter(row => row.getDouble(7) > meanDistancesList(row.getInt(2))._2 + 3.5 * standardDeviationsList(row.getInt(2))._2)
-    .foreach(row => printf("outliers.append([%f, %f])\n", row.getDouble(3), row.getDouble(4)))
+    printf("Detected Outliers:\n\n")
+    predictionsExpanded.filter(row => row.getDouble(7) > meanDistances(row.getInt(2))._2 + 3.5 * stdDistances(row.getInt(2))._2)
+      .foreach(row => printf("(%.5f, %.5f)\n", row.getDouble(3), row.getDouble(4)))
   }
 
   private def writePredictions(dataFrame: DataFrame, outDir: String): Unit = {
@@ -202,7 +196,8 @@ object Main {
 
   private def writeCenters(centers: Array[Vector[Double]], outFile: String): Unit = {
     writeToFile(outFile) { printer =>
-      centers.zipWithIndex.foreach(vector => printer.printf("centers.append([%f, %f, %d])\n", vector._1(0), vector._1(1), vector._2))
+      printer.println("x,y,clusterId")
+      centers.zipWithIndex.foreach(vector => printer.printf("%f,%f,%d\n", vector._1(0), vector._1(1), vector._2))
     }
   }
 
