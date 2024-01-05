@@ -8,18 +8,20 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import java.io.PrintWriter
 
 object Main {
-  private var xMin : Double = 0.0
-  private var xMax : Double = 1.0
-  private var yMin : Double = 0.0
-  private var yMax : Double = 1.0
+  private var xMin: Double = 0.0
+  private var xMax: Double = 1.0
+  private var yMin: Double = 0.0
+  private var yMax: Double = 1.0
 
-   def main(args: Array[String]): Unit = {
+  private final val NANOS_PER_SEC : Double = 1e9d
+
+  def main(args: Array[String]): Unit = {
 
     //    0. Initialize timer, SparkSession and SparkContext
     val startTimestamp = System.nanoTime
     val ss = initializeSparkSession(cores = "*", appName = "PapaGo_Clustering")
     val sc = ss.sparkContext
-    sc.setLogLevel("OFF")
+    sc.setLogLevel("ERROR")
 
     //    1. Read input file
     val rawData = readInputDataFile(sc, args)
@@ -31,23 +33,27 @@ object Main {
     computeMinMaxValues(validCoordinates) // computes xMin, xMax, yMin, yMax and saves them to object attributes
     val transformedCoordinates = performMinMaxScaling(validCoordinates)
 
-     //   4. Implement K-means clustering
+    //   4. Implement K-means clustering for k >> 5   +   5. Detect Outliers
     val dataFrame = createDataFrameFromCoordinatesRDD(transformedCoordinates, ss)
-    runKMeans(k = 50, seed = 1530L, dataFrame = dataFrame, predictionsDir = "predictions.d" , centersOutFile = "kMeans_centers.txt")
-    val duration = (System.nanoTime - startTimestamp) / 1e9d
+    runKMeans(k = 200, seed = System.nanoTime(), dataFrame = dataFrame,
+      predictionsDir = "predictions.d", centersOutFile = "kMeans_centers.csv",
+      detectOutliers = true, removeOutliers = true
+    )
+
+    val duration = (System.nanoTime - startTimestamp) / NANOS_PER_SEC
     println(s"Total execution time: $duration sec")
     sc.stop(0)
   }
 
-  private def initializeSparkSession(cores : String, appName : String) : SparkSession = {
+  private def initializeSparkSession(cores: String, appName: String): SparkSession = {
     SparkSession.builder()
       .master(s"local[$cores]")
       .appName(appName)
       .getOrCreate()
   }
 
-  private def getInputFileName(args: Array[String]) : String = {
-    val defaultFileName = "points.csv"
+  private def getInputFileName(args: Array[String]): String = {
+    val defaultFileName = "data.csv"
     if (args.length == 0) {
       return defaultFileName
     }
@@ -56,21 +62,21 @@ object Main {
 
 
   //    ASSIGNMENT TASK 1
-  private def readInputDataFile(sc : SparkContext, args:Array[String]) : RDD[String] = {
+  private def readInputDataFile(sc: SparkContext, args: Array[String]): RDD[String] = {
     val inputFile = getInputFileName(args)
     sc.textFile(inputFile)
   }
 
-  private def filterOutLinesWithMissingValues(rawData : RDD[String]) : RDD[String] = {
+  private def filterOutLinesWithMissingValues(rawData: RDD[String]): RDD[String] = {
     rawData.filter(line =>
       !line.startsWith(",") &&
-      !line.endsWith(",") &&
-      line.nonEmpty
+        !line.endsWith(",") &&
+        line.nonEmpty
     )
   }
 
   //    ASSIGNMENT TASK 2
-  private def performDataCleaning(rawData : RDD[String]) : RDD[(Double, Double)] = {
+  private def performDataCleaning(rawData: RDD[String]): RDD[(Double, Double)] = {
     val cleanData = filterOutLinesWithMissingValues(rawData)
     splitLinesToDoubleCoordinates(cleanData)
   }
@@ -84,7 +90,7 @@ object Main {
 
 
   //    ASSIGNMENT TASK 3
-  private def performMinMaxScaling(unscaled : RDD[(Double, Double)]) : RDD[(Double, Double)] = {
+  private def performMinMaxScaling(unscaled: RDD[(Double, Double)]): RDD[(Double, Double)] = {
     unscaled.map(coordinates => {
       val x = coordinates._1
       val y = coordinates._2
@@ -101,7 +107,7 @@ object Main {
     yMax = y.max
   }
 
-  private def getOriginalCoordinates(xScaled : Double, yScaled : Double) : Vector[Double] = {
+  private def getOriginalCoordinates(xScaled: Double, yScaled: Double): Vector[Double] = {
     Vector(
       xScaled * (xMax - xMin) + xMin,
       yScaled * (yMax - yMin) + yMin
@@ -110,10 +116,10 @@ object Main {
 
 
   //    ASSIGNMENT TASK 4
-  private def createDataFrameFromCoordinatesRDD(coordinates : RDD[(Double, Double)], ss : SparkSession) : DataFrame = {
+  private def createDataFrameFromCoordinatesRDD(coordinates: RDD[(Double, Double)], ss: SparkSession): DataFrame = {
     val schema = StructType(
       StructField(name = "x", dataType = DoubleType, nullable = false) ::
-      StructField(name = "y", dataType = DoubleType, nullable = false) :: Nil
+        StructField(name = "y", dataType = DoubleType, nullable = false) :: Nil
     )
     val data = coordinates.map(line => Row(
       line._1.asInstanceOf[Number].doubleValue(),
@@ -122,41 +128,90 @@ object Main {
     ss.createDataFrame(data, schema)
   }
 
-  private def runKMeans(k: Integer = 10, seed: Long = 199L, dataFrame: DataFrame,
-                        predictionsDir : String , centersOutFile : String): Unit = {
+  private def runKMeans(k: Integer = 10, seed: Long = 22L, dataFrame: DataFrame,
+                        predictionsDir: String, centersOutFile: String,
+                        detectOutliers: Boolean, removeOutliers: Boolean): Unit = {
 
-    val kMeans = new KMeans().setK(k).setSeed(seed)
-
-    //creating features column
+    // Create features column
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y"))
       .setOutputCol("features")
-
     val features = assembler.transform(dataFrame)
+
     // Train the model
+    val kMeans = new KMeans().setK(k).setSeed(seed)
     val model = kMeans.fit(features)
 
     // Make predictions
-    val predictions = model.transform(features)
+    val predictions = model.transform(features).selectExpr("x as xScaled", "y as yScaled", "prediction as clusterId")
     writePredictions(dataFrame = predictions, outDir = predictionsDir)
 
-    // Retrieve Original Centers and write them to a txt file for future use
+    // Retrieve original coordinates of the cluster centers
     val originalCenters = model.clusterCenters.map(scaledCoordinates => getOriginalCoordinates(scaledCoordinates(0), scaledCoordinates(1)))
     writeCenters(centers = originalCenters, outFile = centersOutFile)
+
+    val predictionsExpanded = predictions
+      .withColumn("xOriginal", predictions("xScaled") * (xMax - xMin) + xMin)
+      .withColumn("yOriginal", predictions("yScaled") * (yMax - yMin) + yMin)
+      .rdd.map(row => {
+      val xScaled = row.getDouble(0)
+      val yScaled = row.getDouble(1)
+      val clusterId = row.getInt(2)
+      val xOriginal = row.getDouble(3)
+      val yOriginal = row.getDouble(4)
+      val xClusterCenter = originalCenters(clusterId)(0)
+      val yClusterCenter = originalCenters(clusterId)(1)
+      val euclideanDistanceFromCenter = math.sqrt(
+        math.pow(xOriginal - xClusterCenter, 2) +
+        math.pow(yOriginal - yClusterCenter, 2)
+      )
+      Row(xScaled, yScaled, clusterId, xOriginal, yOriginal,
+          xClusterCenter, yClusterCenter, euclideanDistanceFromCenter)
+    })
+//    predictionsExpanded.take(5).foreach(println)
+
+    val meanDistancesList = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
+      .mapValues(distance => (distance, 1))
+      .reduceByKey((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
+      .mapValues(pair => pair._1 / pair._2)
+      .collect()
+      .toList
+      .sortBy(pair => pair._1)
+
+    val standardDeviationsList = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
+      .mapValues(x => (1, x, x * x))
+      .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2, x._3 + y._3))
+      .mapValues(x => math.sqrt(x._3 /x._1 - math.pow((x._2/x._1), 2)))
+      .collect()
+      .toList
+      .sortBy(pair => pair._1)
+
+//    meanDistancesList.foreach(println)
+
+//    println()
+
+//    standardDeviationsList.foreach(println)
+
+    predictionsExpanded.filter(row => row.getDouble(7) > meanDistancesList(row.getInt(2))._2 + 3.5 * standardDeviationsList(row.getInt(2))._2)
+    .foreach(row => printf("outliers.append([%f, %f])\n", row.getDouble(3), row.getDouble(4)))
   }
 
-  private def writePredictions(dataFrame : DataFrame, outDir : String) : Unit = {
-    dataFrame.select("x", "y", "prediction").select("x", "y", "prediction").write.mode(SaveMode.Overwrite).csv(outDir)
+  private def writePredictions(dataFrame: DataFrame, outDir: String): Unit = {
+    dataFrame.write.mode(SaveMode.Overwrite).csv(outDir)
   }
 
-  private def writeCenters(centers : Array[Vector[Double]], outFile : String) : Unit = {
+  private def writeCenters(centers: Array[Vector[Double]], outFile: String): Unit = {
     writeToFile(outFile) { printer =>
       centers.zipWithIndex.foreach(vector => printer.printf("centers.append([%f, %f, %d])\n", vector._1(0), vector._1(1), vector._2))
     }
   }
 
-  def writeToFile(outFile: String)(op: java.io.PrintWriter => Unit) {
+  private def writeToFile(outFile: String)(op: java.io.PrintWriter => Unit): Unit = {
     val p = new PrintWriter(outFile)
-    try { op(p) } finally { p.close() }
+    try {
+      op(p)
+    } finally {
+      p.close()
+    }
   }
 }
