@@ -3,13 +3,14 @@ import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
 
 import java.io.PrintWriter
 
 /**
- * Data WareHouses & Data Mining Course, AUTh
+ * Data WareHouses & Data Mining Course, Aristotle University of Thessaloniki
  * Semester programming assignment (Winter 2023-2024)
+ *
  * @author Vasileios Papastergios (ID: 3651), Lazaros Gogos (ID: 3877)
  */
 object Main {
@@ -19,6 +20,7 @@ object Main {
   private var yMax: Double = 1.0
 
   private final val NANOS_PER_SEC: Double = 1e9d
+  private final val DEFAULT_DATA_FILE: String = "data.csv"
 
   def main(args: Array[String]): Unit = {
 
@@ -45,13 +47,14 @@ object Main {
       detectOutliers = true, removeOutliers = true
     )
 
+    //    Calculate execution time
     val duration = (System.nanoTime - startTimestamp) / NANOS_PER_SEC
     println(s"\nTotal execution time: $duration sec")
     sc.stop(0)
   }
 
   /**
-   * A utility function that initializes a SparkSession instance with defined parameters.
+   * Initializes a SparkSession instance with defined parameters.
    *
    * @param cores   the number of cores to use as String. If '*', all available cores are used.
    * @param appName the name of the application.
@@ -65,23 +68,23 @@ object Main {
   }
 
   /**
-   * A utility function that extracts the input file name from command line arguments array, if specified.
-   * In case there are no command line arguments, a default file name is used (data.csv).
+   * Extracts the input file name from command line arguments array, if specified.
+   * In case there are no command line arguments, a default file name is used. The value of the default file
+   * name is specified as object's constant attribute.
    * Corresponds to assignment TASK 1.
    *
    * @param args the command line arguments of function main.
-   * @return the file name as String (if existent in arguments), else a default file name "data.csv".
+   * @return the file name as String (if existent in arguments), else the default file name.
    */
   private def getInputFileName(args: Array[String]): String = {
-    val defaultFileName = "data.csv"
     if (args.length == 0) {
-      return defaultFileName
+      return DEFAULT_DATA_FILE
     }
     args(0)
   }
 
   /**
-   * A utility function that is responsible for reading the input data file and constructing an RDD with the data.
+   * Reads the input data file and constructs an RDD with the data.
    * Corresponds to assignment TASK 1.
    *
    * @param sc   the SparkContext object.
@@ -95,8 +98,8 @@ object Main {
 
 
   /**
-   * A utility function that preforms data cleaning on an RDD[String] containing "x,y" coordinates.
-   * The function removes lines with missing values, splits the "x,y" String per row to (Double, Double)
+   * Preforms data cleaning on an RDD[String] containing "x,y" coordinates.
+   * Removes lines with missing values, splits the "x,y" String per row to (Double, Double)
    * coordinates and constructs an RDD with the clean data.
    * Corresponds to assignment TASK 2.
    *
@@ -109,7 +112,7 @@ object Main {
   }
 
   /**
-   * A utility function that, given an RDD[String] containing "x,y" coordinates, filters out lines that either
+   * Given an RDD[String] containing "x,y" coordinates, filters out lines that either
    * are missing x or y coordinate, or are empty.
    * Corresponds to assignment TASK 2.
    *
@@ -125,7 +128,7 @@ object Main {
   }
 
   /**
-   * A utility function that, given an RDD[String] containing "x,y" coordinates, splits the coordinates
+   * Given an RDD[String] containing "x,y" coordinates, splits the coordinates
    * to Double x, y values and constructs an RDD[(Double, Double)] with the result.
    * Corresponds to assignment TASK 2.
    *
@@ -141,7 +144,7 @@ object Main {
 
 
   /**
-   * A utility function that scales a given RDD containing coordinates to [0, 1] in both dimensions.
+   * Scales a given RDD containing coordinates to [0, 1] in both dimensions.
    * Before calling the function, one should have executed computeMinMaxValues() function.
    * Corresponds to assignment TASK 3.
    *
@@ -158,7 +161,7 @@ object Main {
   }
 
   /**
-   * A utility function that computes the minimum and maximum value for each dimension, given an RDD that contains
+   * Computes the minimum and maximum value for each dimension, given an RDD that contains
    * coordinates. The computed values are stored in object's attributes xMin, xMax, yMin, yMax.
    * Corresponds to assignment TASK 3.
    *
@@ -174,9 +177,8 @@ object Main {
   }
 
   /**
-   * A utility function that transforms a given, scaled (x, y) pair to its original values
-   * (before MinMax scaling). The function uses the Object's attributes xMin, xMax, yMin, yMax
-   * to perform the inverse transformation.
+   * Transforms a given, scaled (x, y) pair to its original values (before MinMax scaling).
+   * The function uses the Object's attributes xMin, xMax, yMin, yMax to perform the inverse transformation.
    * Corresponds to assignment TASK 3.
    *
    * @param xScaled the scaled value of x-coordinate.
@@ -192,7 +194,7 @@ object Main {
 
 
   /**
-   * A utility function that creates a DataFrame from a RDD[(Double, Double)] containing coordinates.
+   * Creates a DataFrame from a RDD[(Double, Double)] containing coordinates.
    * Corresponds to assignment TASK 4.
    *
    * @param coordinates the RDD to be converted to DataFrame.
@@ -211,6 +213,18 @@ object Main {
     ss.createDataFrame(data, schema)
   }
 
+  /**
+   * Executes K-Means algorithm with the specified hyper-parameters and execution flags. Writes the
+   * clustering results (predictions) to csv file(s).
+   *
+   * @param k              the hyper-parameter k of the K-means algorithm.
+   * @param seed           the random seed for initial centers.
+   * @param dataFrame      the DataFrame to train the K-means model on.
+   * @param predictionsDir the output directory to write predictions in.
+   * @param centersOutFile the output file to write the cluster centers in.
+   * @param detectOutliers execution flag to detect outliers or not.
+   * @param removeOutliers execution flag to remove outliers or not. If detectOutliers is set to false, it is ignored.
+   */
   private def runKMeans(k: Integer = 10, seed: Long = 22L, dataFrame: DataFrame,
                         predictionsDir: String, centersOutFile: String,
                         detectOutliers: Boolean, removeOutliers: Boolean): Unit = {
@@ -226,13 +240,34 @@ object Main {
     val model = kMeans.fit(features)
 
     // Make predictions
-    val predictions = model.transform(features).selectExpr("x as xScaled", "y as yScaled", "prediction as clusterId")
-    writePredictions(dataFrame = predictions, outDir = predictionsDir)
+    var predictions = model.transform(features).selectExpr("x as xScaled", "y as yScaled", "prediction as clusterId")
 
     // Retrieve original coordinates of the cluster centers
     val originalCenters = model.clusterCenters.map(scaledCoordinates => getOriginalCoordinates(scaledCoordinates(0), scaledCoordinates(1)))
     writeCenters(centers = originalCenters, outFile = centersOutFile)
 
+    // Detect and remove outliers, if respective flags are set
+    if (detectOutliers) {
+      predictions = this.detectOutliers(predictions, originalCenters, removeOutliers)
+    }
+
+    // Write the predictions is csv format to use in R
+    writeDataFrame(dataFrame = predictions, outDir = predictionsDir)
+  }
+
+  /**
+   * Detects and prints outliers found in the predictions DataFrame, based on the simple algorithm.
+   * Outliers are defined as data points, whose distance from the cluster center is greater than a
+   * specified threshold.
+   *
+   * @param predictions     the predictions DataFrame.
+   * @param originalCenters the original (non scaled) coordinates of the cluster centers found by K-means.
+   * @param removeOutliers  execution flag. If set to true, outliers are removed, else preserved in the returned
+   *                        DataFrame.
+   * @return a DataFrame with the extended predictions data, with/without the outliers, based on
+   *         the removeOutliers flag.
+   */
+  private def detectOutliers(predictions: DataFrame, originalCenters: Array[Vector[Double]], removeOutliers: Boolean): DataFrame = {
     val predictionsExpanded = predictions
       .withColumn("xOriginal", predictions("xScaled") * (xMax - xMin) + xMin)
       .withColumn("yOriginal", predictions("yScaled") * (yMax - yMin) + yMin)
@@ -252,25 +287,95 @@ object Main {
           xClusterCenter, yClusterCenter, euclideanDistanceFromCenter)
       })
 
-    val meanDistances = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
+    val meanDistances = computeMeanDistances(predictionsExpanded)
+    val stdDistances = computeStdDistances(predictionsExpanded)
+
+    // outlier criterion: distanceFromCenter > meanDistanceOfCluster + 3.5 * stdDistanceFromCenter
+    val outliers = predictionsExpanded.filter(row =>
+      row.getDouble(7) > getOutlierThreshold(meanDistances(row.getInt(2))._2, stdDistances(row.getInt(2))._2))
+    printOutliers(outliers)
+
+    if (removeOutliers) {
+      predictionsExpanded.filter(row =>
+        row.getDouble(7) <= getOutlierThreshold(meanDistances(row.getInt(2))._2, stdDistances(row.getInt(2))._2))
+    }
+    createDataFrameFromPredictionsRDD(predictionsExpanded)
+  }
+
+  /**
+   * A utility function that prints the outliers to stdout, formatted as (x, y) pairs.
+   *
+   * @param outliers the outliers to print.
+   */
+  private def printOutliers(outliers: RDD[Row]): Unit = {
+    printf("Detected Outliers:\n\n")
+    outliers.foreach(row => printf("(%.5f, %.5f)\n", row.getDouble(3), row.getDouble(4)))
+  }
+
+  /**
+   * A utility function that converts a predictions RDD to a DataFrame with appropriate schema.
+   *
+   * @param predictionsExpanded the RDD[Row] to convert to DataFrame.
+   * @return a DataFrame with the data contained in the given RDD.
+   */
+  private def createDataFrameFromPredictionsRDD(predictionsExpanded: RDD[Row]): DataFrame = {
+    val schema = StructType(
+      StructField(name = "xScaled", dataType = DoubleType, nullable = false) ::
+        StructField(name = "yScaled", dataType = DoubleType, nullable = false) ::
+        StructField(name = "clusterId", dataType = IntegerType, nullable = false) ::
+        StructField(name = "xOriginal", dataType = DoubleType, nullable = false) ::
+        StructField(name = "yOriginal", dataType = DoubleType, nullable = false) ::
+        StructField(name = "xClusterCenter", dataType = DoubleType, nullable = false) ::
+        StructField(name = "yClusterCenter", dataType = DoubleType, nullable = false) ::
+        StructField(name = "euclideanDistanceFromCenter", dataType = DoubleType, nullable = false) :: Nil
+    )
+    SparkSession.builder().getOrCreate().createDataFrame(predictionsExpanded, schema)
+  }
+
+  /**
+   * Given a mean and a std value, the function computes the outlier threshold, i.e. the upper bound of
+   * distance between a point and its cluster's center, above which the point shall be considered outlier.
+   *
+   * @param meanDistance the mean distance of the points from the respective cluster center.
+   * @param stdDistance  the std distance of the points from the respective cluster center.
+   * @return the outlier threshold.
+   */
+  private def getOutlierThreshold(meanDistance: Double, stdDistance: Double): Double = {
+    meanDistance + 3.5 * stdDistance
+  }
+
+  /**
+   * Computes a List[(Int, Double)] of mean distances between all cluster points and the respective
+   * cluster center for each class.
+   *
+   * @param predictionsExpanded an RDD[Row] containing predictions.
+   * @return a List with the mean distances per class.
+   */
+  private def computeMeanDistances(predictionsExpanded: RDD[Row]): List[(Int, Double)] = {
+    predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
       .mapValues(distance => (distance, 1))
       .reduceByKey((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
       .mapValues(pair => pair._1 / pair._2)
       .collect()
       .toList
       .sortBy(pair => pair._1)
+  }
 
-    val stdDistances = predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
+  /**
+   * Computes a List[(Int, Double)] of standard deviation of distances between all cluster points and the
+   * respective cluster center for each class.
+   *
+   * @param predictionsExpanded an RDD[Row] containing predictions.
+   * @return a List with the standard deviation of distances per class.
+   */
+  private def computeStdDistances(predictionsExpanded: RDD[Row]): List[(Int, Double)] = {
+    predictionsExpanded.map(row => (row.getInt(2), row.getDouble(7)))
       .mapValues(x => (1, x, x * x))
       .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2, x._3 + y._3))
       .mapValues(x => math.sqrt(x._3 / x._1 - math.pow(x._2 / x._1, 2)))
       .collect()
       .toList
       .sortBy(pair => pair._1)
-
-    printf("Detected Outliers:\n\n")
-    predictionsExpanded.filter(row => row.getDouble(7) > meanDistances(row.getInt(2))._2 + 3.5 * stdDistances(row.getInt(2))._2)
-      .foreach(row => printf("(%.5f, %.5f)\n", row.getDouble(3), row.getDouble(4)))
   }
 
   /**
@@ -279,8 +384,8 @@ object Main {
    * @param dataFrame the predictions DataFrame.
    * @param outDir    the directory to write predictions in.
    */
-  private def writePredictions(dataFrame: DataFrame, outDir: String): Unit = {
-    dataFrame.write.mode(SaveMode.Overwrite).csv(outDir)
+  private def writeDataFrame(dataFrame: DataFrame, outDir: String): Unit = {
+    dataFrame.write.option("header", value = true).mode(SaveMode.Overwrite).csv(outDir)
   }
 
   /**
