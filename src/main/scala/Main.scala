@@ -28,7 +28,7 @@ object Main {
     val startTimestamp = System.nanoTime
     val ss = initializeSparkSession(cores = "*", appName = "PapaGo_Clustering")
     val sc = ss.sparkContext
-    sc.setLogLevel("ERROR")
+    sc.setLogLevel("OFF")
 
     //    1. Read input file
     val rawData = readInputDataFile(sc, args)
