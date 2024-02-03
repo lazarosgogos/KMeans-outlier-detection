@@ -42,7 +42,6 @@ the respective cluster center. We consider outliers to be all data points that h
 where a is a hyper-parameter in range [2, 4]. For the given dataset, we use a = 3.5. One can experiment with different
 values of this hyper-parameter to achieve the desired performance on different but similar datasets.
 
-![A scatter plot of two hundred clusters](Images/Outliers.png)
 <p align="center">
     <img align="middle" src="https://github.com/Bilpapster/cluster-them-out/blob/master/Images/outliers.png" alt="A scatter plot five clusters and several detected outliers"/>
 </p>
