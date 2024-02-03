@@ -33,7 +33,9 @@ We use K-means clustering as the tool for detecting anomalies in the data. Knowi
 clusters (5), gives us the opportunity to use a much larger hyper-parameter k (200), in a try to identify small, compound 
 sub-clusters, overcoming possible problems imposed by the different cluster shapes.
 
-![A scatter plot of two hundred clusters](Images/Clusters.png)
+<p align="center">
+    <img align="middle" src="https://github.com/Bilpapster/cluster-them-out/blob/master/Images/clusters.png" alt="A scatter plot of two hundred clusters"/>
+</p>
 
 Based on the latter clusters, we compute the mean distance μ and standard deviation σ of all the data points from
 the respective cluster center. We consider outliers to be all data points that have distance grater than μ + a * σ,
@@ -41,6 +43,9 @@ where a is a hyper-parameter in range [2, 4]. For the given dataset, we use a = 
 values of this hyper-parameter to achieve the desired performance on different but similar datasets.
 
 ![A scatter plot of two hundred clusters](Images/Outliers.png)
+<p align="center">
+    <img align="middle" src="https://github.com/Bilpapster/cluster-them-out/blob/master/Images/outliers.png" alt="A scatter plot five clusters and several detected outliers"/>
+</p>
 
 
 ## Future Improvements
