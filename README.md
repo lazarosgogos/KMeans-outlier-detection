@@ -58,5 +58,6 @@ data, such as removing outliers and/or finding the actual clusters.
 ## Further Information
 
 The interested reader can find a presentation file in the root folder of the current repository. The authors were 
-selected by the Course Professor to hold an in-class presentation for their work, among 20 teams.
+selected by the course Professor [Anastasios Gounaris](https://datalab-old.csd.auth.gr/~gounaris/) to hold an in-class
+presentation of their work, among 20 teams.
 
